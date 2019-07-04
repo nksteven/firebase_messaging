@@ -95,19 +95,19 @@ class FirebaseMessaging {
   ///
   /// [topic] must match the following regular expression:
   /// "[a-zA-Z0-9-_.~%]{1,900}".
-  void subscribeToTopic(String topic) {
+  Future<String> subscribeToTopic(String topic) async {
     // TODO(amirh): remove this on when the invokeMethod update makes it to stable Flutter.
     // https://github.com/flutter/flutter/issues/26431
     // ignore: strong_mode_implicit_dynamic_method
-    _channel.invokeMethod('subscribeToTopic', topic);
+    return await _channel.invokeMethod('subscribeToTopic', topic);
   }
 
   /// Unsubscribe from topic in background.
-  void unsubscribeFromTopic(String topic) {
+  Future<String> unsubscribeFromTopic(String topic) async {
     // TODO(amirh): remove this on when the invokeMethod update makes it to stable Flutter.
     // https://github.com/flutter/flutter/issues/26431
     // ignore: strong_mode_implicit_dynamic_method
-    _channel.invokeMethod('unsubscribeFromTopic', topic);
+    return await _channel.invokeMethod('unsubscribeFromTopic', topic);
   }
 
   /// Resets Instance ID and revokes all tokens. In iOS, it also unregisters from remote notifications.
