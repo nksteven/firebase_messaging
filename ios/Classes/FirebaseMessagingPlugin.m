@@ -130,6 +130,12 @@
 
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center didReceiveNotificationResponse:(UNNotificationResponse *)response withCompletionHandler:(void(^)(void))completionHandler API_AVAILABLE(ios(10.0)) {
     NSDictionary *userInfo = response.notification.request.content.userInfo;
+
+    NSDictionary *newUserInfo = [self rebuildUserInfo:response.notification];
+    if(newUserInfo != nil) {
+        userInfo = newUserInfo;
+    }
+
     // With swizzling disabled you must let Messaging know about the message, for Analytics
     [[FIRMessaging messaging] appDidReceiveMessage:userInfo];
     [self didReceiveRemoteNotification:userInfo];
@@ -142,7 +148,18 @@
        willPresentNotification:(UNNotification *)notification
          withCompletionHandler:(void (^)(UNNotificationPresentationOptions))completionHandler  API_AVAILABLE(ios(10.0)){
     NSDictionary *userInfo = notification.request.content.userInfo;
-    //Receive Gimbal notification
+
+    NSDictionary *newUserInfo = [self rebuildUserInfo:notification];
+    if(newUserInfo != nil) {
+        userInfo = newUserInfo;
+    }
+
+    // With swizzling disabled you must let Messaging know about the message, for Analytics
+    [[FIRMessaging messaging] appDidReceiveMessage:userInfo];
+    [self didReceiveRemoteNotification:userInfo];
+}
+
+- (NSDictionary*)rebuildGimbalNotification:(NSDictionary*)userInfo {
     NSArray* userInfoKeys = [userInfo allKeys];
     if([userInfoKeys containsObject:@"ATTRS"] && [userInfoKeys containsObject:@"TL"]) {
         NSString* title = [userInfo objectForKey:@"TL"];
@@ -160,9 +177,19 @@
                 NSMutableDictionary* userInfoMutableDictionary = [NSMutableDictionary dictionaryWithDictionary:userInfo];
                 [userInfoMutableDictionary setValue:alertDictionary forKey:@"aps"];
                 [userInfoMutableDictionary setValue:@"GimbalType" forKey:@"kNotificationChannelType"];
-                userInfo = userInfoMutableDictionary;
+                return userInfoMutableDictionary;
             }
         }
+    }
+    return nil;
+}
+
+- (NSDictionary*)rebuildUserInfo:(UNNotification *)notification API_AVAILABLE(ios(10.0)) {
+    NSDictionary *userInfo = notification.request.content.userInfo;
+    //Receive Gimbal notification
+    NSArray* userInfoKeys = [userInfo allKeys];
+    if([userInfoKeys containsObject:@"ATTRS"] && [userInfoKeys containsObject:@"TL"]) {
+        return [self rebuildGimbalNotification:userInfo];
     } else if ([userInfoKeys containsObject:@"GMBL_COMMUNICATION"]) {
         //Receive Gimbal place notification
         NSString* bodyValue = notification.request.content.body.description;
@@ -173,11 +200,9 @@
         NSDictionary* alertDictionary = [NSDictionary dictionaryWithObjectsAndKeys:[NSDictionary dictionaryWithObjectsAndKeys:@"", @"title", bodyValue, @"body", nil], @"alert", nil];
         [userInfoMutableDictionary setValue:alertDictionary forKey:@"aps"];
         [userInfoMutableDictionary setValue:@"GimbalType" forKey:@"kNotificationChannelType"];
-        userInfo = userInfoMutableDictionary;
+        return userInfoMutableDictionary;
     }
-    // With swizzling disabled you must let Messaging know about the message, for Analytics
-    [[FIRMessaging messaging] appDidReceiveMessage:userInfo];
-    [self didReceiveRemoteNotification:userInfo];
+    return nil;
 }
 
 #if defined(__IPHONE_10_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_10_0
@@ -207,6 +232,10 @@ didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
 
     if (launchOptions != nil) {
         _launchNotification = launchOptions[UIApplicationLaunchOptionsRemoteNotificationKey];
+        NSDictionary* newLaunchNotification = [self rebuildGimbalNotification:_launchNotification];
+        if (newLaunchNotification != nil) {
+            _launchNotification = newLaunchNotification;
+        }
     }
     return YES;
 }
