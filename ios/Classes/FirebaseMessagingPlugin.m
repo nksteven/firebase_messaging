@@ -9,7 +9,7 @@
 #import <UserNotifications/UserNotifications.h>
 
 #if defined(__IPHONE_10_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_10_0
-@interface FLTFirebaseMessagingPlugin () <FIRMessagingDelegate>
+@interface FLTFirebaseMessagingPlugin () <FIRMessagingDelegate, UNUserNotificationCenterDelegate>
 @end
 #endif
 
@@ -128,6 +128,13 @@
     }
 }
 
+- (void)userNotificationCenter:(UNUserNotificationCenter *)center didReceiveNotificationResponse:(UNNotificationResponse *)response withCompletionHandler:(void(^)(void))completionHandler API_AVAILABLE(ios(10.0)) {
+    NSDictionary *userInfo = response.notification.request.content.userInfo;
+    // With swizzling disabled you must let Messaging know about the message, for Analytics
+    [[FIRMessaging messaging] appDidReceiveMessage:userInfo];
+    [self didReceiveRemoteNotification:userInfo];
+}
+
 // [START ios_10_message_handling]
 // Receive displayed notifications for iOS 10 devices.
 // Handle incoming notification messages while app is in the foreground.
@@ -135,7 +142,39 @@
        willPresentNotification:(UNNotification *)notification
          withCompletionHandler:(void (^)(UNNotificationPresentationOptions))completionHandler  API_AVAILABLE(ios(10.0)){
     NSDictionary *userInfo = notification.request.content.userInfo;
-
+    //Receive Gimbal notification
+    NSArray* userInfoKeys = [userInfo allKeys];
+    if([userInfoKeys containsObject:@"ATTRS"] && [userInfoKeys containsObject:@"TL"]) {
+        NSString* title = [userInfo objectForKey:@"TL"];
+        if(title == nil || [title isKindOfClass:[NSNull class]]) {
+            title = [NSString stringWithFormat:@""];;
+        }
+        if([userInfoKeys containsObject:@"aps"] && [[userInfo objectForKey:@"aps"] isKindOfClass:[NSDictionary class]]) {
+            NSDictionary* apsValue = [userInfo objectForKey:@"aps"];
+            if([[apsValue allKeys]containsObject:@"alert"]) {
+                NSString* bodyValue = [apsValue objectForKey:@"alert"];
+                if(bodyValue == nil || [bodyValue isKindOfClass:[NSNull class]]) {
+                    bodyValue = [NSString stringWithFormat:@""];
+                }
+                NSDictionary* alertDictionary = [NSDictionary dictionaryWithObjectsAndKeys:[NSDictionary dictionaryWithObjectsAndKeys:title, @"title", bodyValue, @"body", nil], @"alert", nil];
+                NSMutableDictionary* userInfoMutableDictionary = [NSMutableDictionary dictionaryWithDictionary:userInfo];
+                [userInfoMutableDictionary setValue:alertDictionary forKey:@"aps"];
+                [userInfoMutableDictionary setValue:@"GimbalType" forKey:@"kNotificationChannelType"];
+                userInfo = userInfoMutableDictionary;
+            }
+        }
+    } else if ([userInfoKeys containsObject:@"GMBL_COMMUNICATION"]) {
+        //Receive Gimbal place notification
+        NSString* bodyValue = notification.request.content.body.description;
+        if(bodyValue == nil || [bodyValue isKindOfClass:[NSNull class]]) {
+            bodyValue = [NSString stringWithFormat:@""];
+        }
+        NSMutableDictionary* userInfoMutableDictionary = [NSMutableDictionary dictionaryWithDictionary:userInfo];
+        NSDictionary* alertDictionary = [NSDictionary dictionaryWithObjectsAndKeys:[NSDictionary dictionaryWithObjectsAndKeys:@"", @"title", bodyValue, @"body", nil], @"alert", nil];
+        [userInfoMutableDictionary setValue:alertDictionary forKey:@"aps"];
+        [userInfoMutableDictionary setValue:@"GimbalType" forKey:@"kNotificationChannelType"];
+        userInfo = userInfoMutableDictionary;
+    }
     // With swizzling disabled you must let Messaging know about the message, for Analytics
     [[FIRMessaging messaging] appDidReceiveMessage:userInfo];
     [self didReceiveRemoteNotification:userInfo];
@@ -160,6 +199,12 @@
 
 - (BOOL)application:(UIApplication *)application
 didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
+
+    if (@available(iOS 10.0, *)) {
+        UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
+        center.delegate = self;
+    }
+
     if (launchOptions != nil) {
         _launchNotification = launchOptions[UIApplicationLaunchOptionsRemoteNotificationKey];
     }
