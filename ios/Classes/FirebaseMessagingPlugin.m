@@ -259,8 +259,8 @@ didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
     // therefore the next line is setting it to 1 first before clearing it again
     // to remove all
     // notifications.
-    application.applicationIconBadgeNumber = 1;
-    application.applicationIconBadgeNumber = 0;
+//    application.applicationIconBadgeNumber = 1;
+//    application.applicationIconBadgeNumber = 0;
 }
 
 - (bool)application:(UIApplication *)application
