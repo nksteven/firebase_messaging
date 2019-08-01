@@ -9,6 +9,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
 import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
@@ -34,6 +35,7 @@ public class FirebaseMessagingPlugin extends BroadcastReceiver
     implements MethodCallHandler, NewIntentListener {
   private final Registrar registrar;
   private final MethodChannel channel;
+  public static final String GIMBAL_FLAG = "GIMBAL_FLAG";
 
   private static final String CLICK_ACTION_VALUE = "FLUTTER_NOTIFICATION_CLICK";
   private static final String TAG = "FirebaseMessagingPlugin";
@@ -52,7 +54,7 @@ public class FirebaseMessagingPlugin extends BroadcastReceiver
     FirebaseApp.initializeApp(registrar.context());
 
     IntentFilter intentFilter = new IntentFilter();
-    intentFilter.addAction(FlutterFirebaseMessagingService.ACTION_TOKEN);
+    intentFilter.addAction(FlutterFirebaseInstanceIDService.ACTION_TOKEN);
     intentFilter.addAction(FlutterFirebaseMessagingService.ACTION_REMOTE_MESSAGE);
     LocalBroadcastManager manager = LocalBroadcastManager.getInstance(registrar.context());
     manager.registerReceiver(this, intentFilter);
@@ -62,20 +64,48 @@ public class FirebaseMessagingPlugin extends BroadcastReceiver
   @Override
   public void onReceive(Context context, Intent intent) {
     String action = intent.getAction();
-
     if (action == null) {
       return;
     }
 
-    if (action.equals(FlutterFirebaseMessagingService.ACTION_TOKEN)) {
-      String token = intent.getStringExtra(FlutterFirebaseMessagingService.EXTRA_TOKEN);
+    if (action.equals(FlutterFirebaseInstanceIDService.ACTION_TOKEN)) {
+      String token = intent.getStringExtra(FlutterFirebaseInstanceIDService.EXTRA_TOKEN);
       channel.invokeMethod("onToken", token);
     } else if (action.equals(FlutterFirebaseMessagingService.ACTION_REMOTE_MESSAGE)) {
-      RemoteMessage message =
-          intent.getParcelableExtra(FlutterFirebaseMessagingService.EXTRA_REMOTE_MESSAGE);
-      Map<String, Object> content = parseRemoteMessage(message);
+      Map<String, Object> content;
+      boolean isGimbal=intent.getBooleanExtra(GIMBAL_FLAG,false);
+      if (isGimbal){
+        content = parseGimbalMessage(intent);
+      }else{
+        RemoteMessage message =
+                intent.getParcelableExtra(FlutterFirebaseMessagingService.EXTRA_REMOTE_MESSAGE);
+        content = parseRemoteMessage(message);
+      }
       channel.invokeMethod("onMessage", content);
     }
+  }
+
+  @NonNull
+  private Map<String, Object> parseGimbalMessage(Intent intent) {
+    Map<String, Object> content = new HashMap<>();
+
+    Map<String, Object> notificationMap = new HashMap<>();
+
+    String title = intent.getStringExtra("title");
+    notificationMap.put("title", title);
+
+    String body = intent.getStringExtra("body");
+    notificationMap.put("body", body);
+    RemoteMessage message =
+            intent.getParcelableExtra(FlutterFirebaseMessagingService.EXTRA_REMOTE_MESSAGE);
+    if (message!=null){
+      for (String s : message.getData().keySet()) {
+        Log.d("TAG","FirebaseMessagePlugin--key="+s);
+      }
+      content.put("data", message.getData());
+    }
+    content.put("notification", notificationMap);
+    return content;
   }
 
   @NonNull
@@ -90,7 +120,7 @@ public class FirebaseMessagingPlugin extends BroadcastReceiver
     String title = notification != null ? notification.getTitle() : null;
     notificationMap.put("title", title);
 
-    String body = notification != null ? notification.getBody() : null;
+    String body = notification != null ? notification.getBody() : message.getData().get("DESC");
     notificationMap.put("body", body);
 
     content.put("notification", notificationMap);
@@ -100,19 +130,7 @@ public class FirebaseMessagingPlugin extends BroadcastReceiver
   @Override
   public void onMethodCall(final MethodCall call, final Result result) {
     if ("configure".equals(call.method)) {
-      FirebaseInstanceId.getInstance()
-          .getInstanceId()
-          .addOnCompleteListener(
-              new OnCompleteListener<InstanceIdResult>() {
-                @Override
-                public void onComplete(@NonNull Task<InstanceIdResult> task) {
-                  if (!task.isSuccessful()) {
-                    Log.w(TAG, "getToken, error fetching instanceID: ", task.getException());
-                    return;
-                  }
-                  channel.invokeMethod("onToken", task.getResult().getToken());
-                }
-              });
+      FlutterFirebaseInstanceIDService.broadcastToken(registrar.context());
       if (registrar.activity() != null) {
         sendMessageFromIntent("onLaunch", registrar.activity().getIntent());
       }
