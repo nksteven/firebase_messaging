@@ -48,21 +48,37 @@
 - (void)handleMethodCall:(FlutterMethodCall *)call result:(FlutterResult)result {
     NSString *method = call.method;
     if ([@"requestNotificationPermissions" isEqualToString:method]) {
-        UIUserNotificationType notificationTypes = 0;
-        NSDictionary *arguments = call.arguments;
-        if ([arguments[@"sound"] boolValue]) {
-            notificationTypes |= UIUserNotificationTypeSound;
+        if (@available(iOS 10.0, *)) {
+            // iOS 10 or later
+            // For iOS 10 display notification (sent via APNS)
+            [UNUserNotificationCenter currentNotificationCenter].delegate = self;
+            UNAuthorizationOptions authOptions = UNAuthorizationOptionAlert |
+            UNAuthorizationOptionSound | UNAuthorizationOptionBadge;
+            [[UNUserNotificationCenter currentNotificationCenter]
+             requestAuthorizationWithOptions:authOptions
+             completionHandler:^(BOOL granted, NSError * _Nullable error) {
+                 // ...
+             }];
+            
+        } else {
+            // Fallback on earlier versions
+            UIUserNotificationType notificationTypes = 0;
+            NSDictionary *arguments = call.arguments;
+            if ([arguments[@"sound"] boolValue]) {
+                notificationTypes |= UIUserNotificationTypeSound;
+            }
+            if ([arguments[@"alert"] boolValue]) {
+                notificationTypes |= UIUserNotificationTypeAlert;
+            }
+            if ([arguments[@"badge"] boolValue]) {
+                notificationTypes |= UIUserNotificationTypeBadge;
+            }
+            UIUserNotificationSettings *settings =
+            [UIUserNotificationSettings settingsForTypes:notificationTypes categories:nil];
+            [[UIApplication sharedApplication] registerUserNotificationSettings:settings];
+            
         }
-        if ([arguments[@"alert"] boolValue]) {
-            notificationTypes |= UIUserNotificationTypeAlert;
-        }
-        if ([arguments[@"badge"] boolValue]) {
-            notificationTypes |= UIUserNotificationTypeBadge;
-        }
-        UIUserNotificationSettings *settings =
-        [UIUserNotificationSettings settingsForTypes:notificationTypes categories:nil];
-        [[UIApplication sharedApplication] registerUserNotificationSettings:settings];
-
+        
         result(nil);
     } else if ([@"configure" isEqualToString:method]) {
         [FIRMessaging messaging].shouldEstablishDirectChannel = true;
